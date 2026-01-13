@@ -44,9 +44,20 @@ sns.set_palette("husl")
 @st.cache_data
 def load_data():
     """Load and prepare data."""
+    from pathlib import Path
+    
+    # Get the directory where the script is located
+    script_dir = Path(__file__).parent
+    data_file = script_dir / 'Manzi.xlsx'
+    
+    # Also try current working directory
+    if not data_file.exists():
+        data_file = Path('Manzi.xlsx')
+    
+    asset_names = ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes']
+    
     try:
-        asset_names = ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes']
-        df = pd.read_excel('qrm/qrm/Manzi.xlsx', skiprows=2)
+        df = pd.read_excel(data_file, skiprows=2)
         df.columns = ['Date'] + asset_names
         df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
@@ -60,8 +71,17 @@ def load_data():
         
         return df, log_returns, asset_names
     except Exception as e:
-        st.error(f"Could not load data: {e}")
-        return None, None, None
+        st.warning(f"Data file not found. Using sample data for demonstration. Error: {e}")
+        
+        # Create sample data for demonstration
+        np.random.seed(42)
+        dates = pd.date_range('2005-01-03', '2025-12-31', freq='B')
+        sample_returns = pd.DataFrame({
+            asset: np.random.normal(0.05, 1.5, len(dates)) 
+            for asset in asset_names
+        }, index=dates)
+        
+        return None, sample_returns, asset_names
 
 
 # Sidebar navigation
