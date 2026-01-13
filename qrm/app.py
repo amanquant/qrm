@@ -46,7 +46,7 @@ def load_data():
     """Load and prepare data."""
     try:
         asset_names = ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes']
-        df = pd.read_excel('Manzi.xlsx', skiprows=2)
+        df = pd.read_excel('qrm/qrm/Manzi.xlsx', skiprows=2)
         df.columns = ['Date'] + asset_names
         df['Date'] = pd.to_datetime(df['Date'])
         df.set_index('Date', inplace=True)
