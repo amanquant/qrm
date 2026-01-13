@@ -1,14 +1,17 @@
 """
 QRM Analysis Showcase - Streamlit App
 ======================================
-Interactive dashboard to explore all parts of the Quantitative Risk Management analysis.
+Interactive dashboard with dynamically generated charts.
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import os
-from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore')
 
 # Page configuration
 st.set_page_config(
@@ -28,39 +31,37 @@ st.markdown("""
         text-align: center;
         margin-bottom: 1rem;
     }
-    .section-header {
-        font-size: 1.5rem;
-        color: #2c3e50;
-        border-bottom: 2px solid #1f77b4;
-        padding-bottom: 0.5rem;
-        margin-top: 1rem;
-    }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1rem;
-        border-radius: 10px;
-        color: white;
-    }
-    .code-snippet {
-        background-color: #f4f4f4;
-        border-radius: 5px;
-        padding: 1rem;
-        font-family: monospace;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-
-def load_image(filename):
-    """Load and display image if exists."""
-    if os.path.exists(filename):
-        return filename
-    return None
+plt.style.use('seaborn-v0_8-whitegrid')
+sns.set_palette("husl")
 
 
-def show_code_snippet(code, language="python"):
-    """Display code snippet with syntax highlighting."""
-    st.code(code, language=language)
+# =============================================================================
+# DATA LOADING
+# =============================================================================
+@st.cache_data
+def load_data():
+    """Load and prepare data."""
+    try:
+        asset_names = ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes']
+        df = pd.read_excel('Manzi.xlsx', skiprows=2)
+        df.columns = ['Date'] + asset_names
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+        for col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        df.dropna(inplace=True)
+        
+        # Compute log returns
+        log_returns = np.log(df / df.shift(1)) * 100
+        log_returns.dropna(inplace=True)
+        
+        return df, log_returns, asset_names
+    except Exception as e:
+        st.error(f"Could not load data: {e}")
+        return None, None, None
 
 
 # Sidebar navigation
@@ -82,8 +83,7 @@ selected = st.sidebar.radio("Select Section", list(parts.keys()))
 selected_part = parts[selected]
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📁 Data")
-st.sidebar.info("**Source:** Manzi.xlsx\n\n**Assets:** Walmart, Costco, HomeDepot, Pepsico, TJX, Lowes\n\n**Period:** 2005-2025")
+st.sidebar.info("**Assets:** Walmart, Costco, HomeDepot, Pepsico, TJX, Lowes\n\n**Period:** 2005-2025")
 
 
 # =============================================================================
@@ -111,47 +111,12 @@ if selected_part == "overview":
     col1, col2 = st.columns(2)
     
     with col1:
-        st.success("""
-        **Best VaR Models:**
-        - GARCH + Normal (96.7% pass rate)
-        - GARCH + GPD (96.7% pass rate)
-        """)
-        
-        st.warning("""
-        **Riskiest Asset:** Lowe's
-        - 95% ES: -4.29%
-        - 99% ES: -7.21%
-        """)
+        st.success("**Best VaR Models:**\n- GARCH + Normal (96.7%)\n- GARCH + GPD (96.7%)")
+        st.warning("**Riskiest Asset:** Lowe's\n- 95% ES: -4.29%")
     
     with col2:
-        st.info("""
-        **Stylized Facts Confirmed:**
-        - Non-normality ✓
-        - Volatility clustering ✓
-        - Fat tails ✓
-        """)
-        
-        st.success("""
-        **Safest Asset:** Pepsico
-        - 95% ES: -2.63%
-        - 99% ES: -4.54%
-        """)
-    
-    st.markdown("---")
-    st.markdown("### 📑 Analysis Parts")
-    
-    parts_info = {
-        "Part 1": "Descriptive statistics, normality tests, ARCH effects",
-        "Part 2": "GARCH(1,1) modeling with Normal distribution",
-        "Part 3": "VaR with Normal and Student-t distributions",
-        "Part 4": "VaR with GEV (independence and dependence)",
-        "Part 5": "VaR with GPD (Peaks Over Threshold)",
-        "Part 6": "Comprehensive backtesting framework",
-        "Part 7": "Expected Shortfall analysis"
-    }
-    
-    for part, desc in parts_info.items():
-        st.markdown(f"**{part}:** {desc}")
+        st.info("**Stylized Facts:**\n- Non-normality ✓\n- Volatility clustering ✓\n- Fat tails ✓")
+        st.success("**Safest Asset:** Pepsico\n- 95% ES: -2.63%")
 
 
 # =============================================================================
@@ -160,82 +125,67 @@ if selected_part == "overview":
 elif selected_part == "part1":
     st.markdown("# 📈 Part 1: Descriptive Analysis")
     
-    st.markdown("""
-    > *Compute logarithmic returns and perform descriptive analysis, highlighting serial dependence, 
-    asymmetry, deviations from normality, volatility clustering, and extreme events.*
-    """)
+    prices_df, log_returns, asset_names = load_data()
     
-    tab1, tab2, tab3 = st.tabs(["📊 Results", "📈 Charts", "💻 Code"])
-    
-    with tab1:
-        st.markdown("### Descriptive Statistics")
+    if log_returns is not None:
+        tab1, tab2, tab3 = st.tabs(["📊 Results", "📈 Charts", "💻 Code"])
         
-        stats_data = {
-            'Asset': ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes'],
-            'Mean': [0.041, 0.074, 0.068, 0.043, 0.068, 0.057],
-            'Std Dev': [1.42, 1.61, 1.76, 1.17, 1.70, 1.95],
-            'Skewness': [0.006, -0.277, -0.317, -0.436, -0.387, -0.580],
-            'Kurtosis': [12.87, 6.95, 5.42, 17.42, 5.61, 16.01],
-            'Min': [-11.8, -12.4, -14.5, -15.0, -14.9, -20.2],
-            'Max': [11.9, 9.5, 11.1, 9.8, 10.0, 15.2]
-        }
-        st.dataframe(pd.DataFrame(stats_data), use_container_width=True)
+        with tab1:
+            st.markdown("### Descriptive Statistics")
+            stats = log_returns.describe().T
+            stats['Skewness'] = log_returns.skew()
+            stats['Kurtosis'] = log_returns.kurtosis()
+            st.dataframe(stats[['mean', 'std', 'min', 'max', 'Skewness', 'Kurtosis']], use_container_width=True)
+            
+            st.markdown("### Key Findings")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Serial Dependence:** ✅ Significant")
+                st.markdown("**Asymmetry:** ✅ 5/6 negatively skewed")
+                st.markdown("**Normality:** ❌ All reject normality")
+            with col2:
+                st.markdown("**ARCH Effects:** ✅ Strong clustering")
+                st.markdown("**Extreme Events:** 3-6x more than expected")
         
-        st.markdown("### Key Findings")
-        col1, col2 = st.columns(2)
+        with tab2:
+            st.markdown("### Log Returns Time Series")
+            fig, axes = plt.subplots(3, 2, figsize=(14, 10))
+            axes = axes.flatten()
+            for idx, asset in enumerate(asset_names):
+                axes[idx].plot(log_returns.index, log_returns[asset], linewidth=0.5)
+                axes[idx].set_title(asset)
+                axes[idx].set_ylabel('Return (%)')
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            st.markdown("### Return Distributions")
+            fig, axes = plt.subplots(2, 3, figsize=(14, 8))
+            axes = axes.flatten()
+            for idx, asset in enumerate(asset_names):
+                axes[idx].hist(log_returns[asset], bins=50, density=True, alpha=0.7, edgecolor='black')
+                axes[idx].set_title(asset)
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            st.markdown("### Correlation Heatmap")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            sns.heatmap(log_returns.corr(), annot=True, cmap='coolwarm', center=0, ax=ax)
+            st.pyplot(fig)
         
-        with col1:
-            st.markdown("**Serial Dependence:** ✅ Significant in all assets")
-            st.markdown("**Asymmetry:** ✅ 5/6 assets negatively skewed")
-            st.markdown("**Normality:** ❌ All assets reject normality")
-        
-        with col2:
-            st.markdown("**ARCH Effects:** ✅ Strong volatility clustering")
-            st.markdown("**Extreme Events:** 3-6x more than expected under normality")
-            st.markdown("**Time-Varying Variance:** ✅ Non-stationary")
-    
-    with tab2:
-        st.markdown("### Generated Charts")
-        
-        images = [
-            ('fig1_log_returns_timeseries.png', 'Log Returns Time Series'),
-            ('fig2_return_distributions.png', 'Return Distributions'),
-            ('fig3_acf_plots.png', 'ACF Plots'),
-            ('fig4_rolling_correlations.png', 'Rolling Correlations'),
-            ('fig5_correlation_heatmap.png', 'Correlation Heatmap'),
-            ('fig6_rolling_volatility.png', 'Rolling Volatility')
-        ]
-        
-        for img, title in images:
-            if os.path.exists(img):
-                st.markdown(f"**{title}**")
-                st.image(img, use_container_width=True)
-            else:
-                st.info(f"Chart '{img}' not found. Run part1.py to generate.")
-    
-    with tab3:
-        st.markdown("### Python Code (`part1.py`)")
-        code = '''
+        with tab3:
+            st.code('''
 # Log returns computation
-def compute_log_returns(prices_df):
-    log_returns = np.log(prices_df / prices_df.shift(1))
-    log_returns.dropna(inplace=True)
-    log_returns_scaled = log_returns * 100
-    return log_returns, log_returns_scaled
+log_returns = np.log(prices / prices.shift(1)) * 100
 
-# Normality tests
-def test_normality(log_returns):
-    for asset in log_returns.columns:
-        jb_stat, jb_pval = stats.jarque_bera(log_returns[asset])
-        print(f"{asset}: JB={jb_stat:.2f}, p={jb_pval:.4f}")
+# Descriptive statistics
+stats = log_returns.describe().T
+stats['Skewness'] = log_returns.skew()
+stats['Kurtosis'] = log_returns.kurtosis()
 
-# ARCH-LM test for volatility clustering
-from statsmodels.stats.diagnostic import het_arch
-for asset in assets:
-    lm_stat, lm_pval, _, _ = het_arch(returns_demeaned[asset])
-    print(f"{asset}: ARCH effect p-value = {lm_pval:.4f}")
-'''
-        st.code(code, language="python")
+# Normality test
+from scipy.stats import jarque_bera
+jb_stat, jb_pval = jarque_bera(returns)
+            ''', language="python")
 
 
 # =============================================================================
@@ -244,49 +194,40 @@ for asset in assets:
 elif selected_part == "part2":
     st.markdown("# 📉 Part 2: GARCH Modeling")
     
-    st.markdown("""
-    > *Fit univariate GARCH model using Normal density. Comment on statistical significance. 
-    Plot conditional variance.*
-    """)
-    
     tab1, tab2, tab3 = st.tabs(["📊 Results", "📈 Charts", "💻 Code"])
     
     with tab1:
         st.markdown("### GARCH(1,1) Parameter Estimates")
-        
-        garch_data = {
+        garch_data = pd.DataFrame({
             'Asset': ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes'],
             'mu': [0.041, 0.090, 0.084, 0.050, 0.082, 0.075],
             'omega': [0.037, 0.057, 0.054, 0.045, 0.056, 0.125],
             'alpha': [0.051, 0.068, 0.088, 0.086, 0.076, 0.091],
             'beta': [0.925, 0.902, 0.889, 0.870, 0.902, 0.871],
             'Persistence': [0.977, 0.970, 0.977, 0.955, 0.978, 0.963]
-        }
-        st.dataframe(pd.DataFrame(garch_data), use_container_width=True)
-        
-        st.markdown("### Interpretation")
-        st.info("""
-        - **High Persistence (α+β ≈ 0.97):** Volatility shocks decay slowly
-        - **Beta significant in all assets:** Strong GARCH effect
-        - **All models stationary:** α+β < 1
-        """)
+        })
+        st.dataframe(garch_data, use_container_width=True)
+        st.info("**Persistence (α+β ≈ 0.97):** Volatility shocks decay slowly")
     
     with tab2:
-        images = [
-            ('fig_garch_conditional_volatility_all.png', 'Conditional Volatility - All Assets'),
-            ('fig_garch_detailed_Walmart.png', 'Detailed GARCH Analysis - Walmart'),
-            ('fig_garch_volatility_comparison.png', 'Volatility Comparison')
-        ]
-        
-        for img, title in images:
-            if os.path.exists(img):
-                st.markdown(f"**{title}**")
-                st.image(img, use_container_width=True)
-            else:
-                st.info(f"Chart '{img}' not found. Run part2.py to generate.")
+        st.markdown("### GARCH Persistence Visualization")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        assets = ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes']
+        alphas = [0.051, 0.068, 0.088, 0.086, 0.076, 0.091]
+        betas = [0.925, 0.902, 0.889, 0.870, 0.902, 0.871]
+        x = np.arange(len(assets))
+        ax.bar(x - 0.2, alphas, 0.4, label='Alpha (ARCH)', color='steelblue')
+        ax.bar(x + 0.2, betas, 0.4, label='Beta (GARCH)', color='coral')
+        ax.set_xticks(x)
+        ax.set_xticklabels(assets, rotation=45)
+        ax.set_ylabel('Parameter Value')
+        ax.legend()
+        ax.set_title('GARCH(1,1) Parameters by Asset')
+        plt.tight_layout()
+        st.pyplot(fig)
     
     with tab3:
-        code = '''
+        st.code('''
 from arch import arch_model
 
 # Fit GARCH(1,1) with Normal distribution
@@ -294,14 +235,9 @@ model = arch_model(returns, mean='Constant', vol='GARCH',
                    p=1, q=1, dist='Normal')
 result = model.fit(disp='off')
 
-# Extract parameters
 print(result.summary())
 print(f"Persistence: {result.params['alpha[1]'] + result.params['beta[1]']:.4f}")
-
-# Get conditional volatility
-cond_vol = result.conditional_volatility
-'''
-        st.code(code, language="python")
+        ''', language="python")
 
 
 # =============================================================================
@@ -310,56 +246,50 @@ cond_vol = result.conditional_volatility
 elif selected_part == "part3":
     st.markdown("# ⚠️ Part 3: VaR with Normal & Student-t")
     
-    st.markdown("""
-    > *Compute VaR under Normality (Case 1) and with Student-t distribution (Case 2).*
-    """)
-    
     tab1, tab2, tab3 = st.tabs(["📊 Results", "📈 Charts", "💻 Code"])
     
     with tab1:
         st.markdown("### VaR Backtesting Results (95% Confidence)")
-        
-        var_data = {
+        var_data = pd.DataFrame({
             'Asset': ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes'],
             'Normal Violations': [10, 14, 13, 20, 7, 10],
             'Normal Rate': ['3.85%', '5.38%', '5.00%', '7.69%', '2.69%', '3.85%'],
             'Student-t Violations': [2, 4, 4, 5, 0, 1],
             'Student-t Rate': ['0.77%', '1.54%', '1.54%', '1.92%', '0.00%', '0.38%']
-        }
-        st.dataframe(pd.DataFrame(var_data), use_container_width=True)
-        
-        st.warning("**Expected Rate: 5%** - Normal is closer to expected; Student-t is too conservative.")
+        })
+        st.dataframe(var_data, use_container_width=True)
+        st.warning("**Expected Rate: 5%** - Normal is closer; Student-t is too conservative.")
     
     with tab2:
-        images = [
-            ('fig_var_forecasts_95.png', 'VaR Forecasts (95%)'),
-            ('fig_var_comparison_Walmart.png', 'VaR Comparison - Walmart'),
-            ('fig_forecast_variance.png', 'Forecast Variance')
-        ]
-        
-        for img, title in images:
-            if os.path.exists(img):
-                st.markdown(f"**{title}**")
-                st.image(img, use_container_width=True)
+        st.markdown("### Violation Rate Comparison")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        assets = ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes']
+        normal_rates = [3.85, 5.38, 5.00, 7.69, 2.69, 3.85]
+        t_rates = [0.77, 1.54, 1.54, 1.92, 0.00, 0.38]
+        x = np.arange(len(assets))
+        ax.bar(x - 0.2, normal_rates, 0.4, label='Normal', color='steelblue')
+        ax.bar(x + 0.2, t_rates, 0.4, label='Student-t', color='coral')
+        ax.axhline(y=5, color='red', linestyle='--', linewidth=2, label='Expected (5%)')
+        ax.set_xticks(x)
+        ax.set_xticklabels(assets, rotation=45)
+        ax.set_ylabel('Violation Rate (%)')
+        ax.legend()
+        ax.set_title('VaR Violation Rates: Normal vs Student-t')
+        plt.tight_layout()
+        st.pyplot(fig)
     
     with tab3:
-        code = '''
+        st.code('''
 from scipy.stats import norm, t as student_t
 
 # VaR Case 1: Normal
-z_alpha = norm.ppf(0.05)  # 95% VaR
+z_alpha = norm.ppf(0.05)
 var_normal = mu + z_alpha * sigma
 
 # VaR Case 2: Student-t
-# Fit GARCH with t-distribution
-model_t = arch_model(data, dist='t')
-result_t = model_t.fit()
-nu = result_t.params['nu']  # degrees of freedom
-
 t_alpha = student_t.ppf(0.05, df=nu)
 var_t = mu + t_alpha * sigma * np.sqrt((nu-2)/nu)
-'''
-        st.code(code, language="python")
+        ''', language="python")
 
 
 # =============================================================================
@@ -368,57 +298,47 @@ var_t = mu + t_alpha * sigma * np.sqrt((nu-2)/nu)
 elif selected_part == "part4":
     st.markdown("# 🎯 Part 4: VaR with GEV")
     
-    st.markdown("""
-    > *Fit GEV on standardized residuals with independence (Case 3) and dependence (Case 4).*
-    """)
-    
     tab1, tab2, tab3 = st.tabs(["📊 Results", "📈 Charts", "💻 Code"])
     
     with tab1:
         st.markdown("### GEV Parameters")
-        
-        gev_data = {
+        gev_data = pd.DataFrame({
             'Asset': ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes'],
             'Extremal Index': [0.931, 0.950, 0.939, 0.962, 0.962, 0.946],
             'xi (shape)': [0.202, 0.242, 0.054, 0.130, 0.085, 0.178],
             'mu (location)': [1.466, 1.496, 1.662, 1.624, 1.643, 1.549],
             'sigma (scale)': [0.663, 0.609, 0.644, 0.620, 0.541, 0.636]
-        }
-        st.dataframe(pd.DataFrame(gev_data), use_container_width=True)
-        
-        st.info("All ξ > 0 indicates **heavy-tailed (Fréchet-type)** distributions.")
+        })
+        st.dataframe(gev_data, use_container_width=True)
+        st.info("All ξ > 0: Heavy-tailed (Fréchet-type) distributions")
     
     with tab2:
-        images = [
-            ('fig_gev_qq_plots.png', 'Q-Q Plots'),
-            ('fig_gev_block_maxima.png', 'Block Maxima with GEV Fit'),
-            ('fig_gev_var_comparison.png', 'GEV VaR Comparison')
-        ]
-        
-        for img, title in images:
-            if os.path.exists(img):
-                st.markdown(f"**{title}**")
-                st.image(img, use_container_width=True)
+        st.markdown("### GEV Shape Parameter by Asset")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        assets = ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes']
+        xi_values = [0.202, 0.242, 0.054, 0.130, 0.085, 0.178]
+        colors = ['coral' if x > 0 else 'steelblue' for x in xi_values]
+        ax.bar(assets, xi_values, color=colors, alpha=0.8, edgecolor='black')
+        ax.axhline(y=0, color='black', linestyle='-', linewidth=1)
+        ax.set_ylabel('ξ (Shape Parameter)')
+        ax.set_title('GEV Shape Parameter (ξ > 0 = Heavy Tails)')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        st.pyplot(fig)
     
     with tab3:
-        code = '''
+        st.code('''
 from scipy.stats import genextreme
 
 # Extract block maxima (21-day blocks)
-def extract_block_minima(data, block_size=21):
-    neg_data = -data.values
-    n_blocks = len(neg_data) // block_size
-    block_maxima = [np.max(neg_data[i*block_size:(i+1)*block_size]) 
-                    for i in range(n_blocks)]
-    return np.array(block_maxima)
+block_maxima = [np.max(data[i*21:(i+1)*21]) for i in range(n_blocks)]
 
 # Fit GEV
 params = genextreme.fit(block_maxima)
-xi = -params[0]  # shape (scipy uses c = -xi)
+xi = -params[0]  # shape
 mu = params[1]   # location
 sigma = params[2] # scale
-'''
-        st.code(code, language="python")
+        ''', language="python")
 
 
 # =============================================================================
@@ -427,47 +347,43 @@ sigma = params[2] # scale
 elif selected_part == "part5":
     st.markdown("# 📊 Part 5: VaR with GPD")
     
-    st.markdown("""
-    > *Implement GARCH + GPD (Peaks Over Threshold) as Case 5.*
-    """)
-    
     tab1, tab2, tab3 = st.tabs(["📊 Results", "📈 Charts", "💻 Code"])
     
     with tab1:
         st.markdown("### GPD Parameters")
-        
-        gpd_data = {
+        gpd_data = pd.DataFrame({
             'Asset': ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes'],
             'Threshold': [1.066, 1.134, 1.208, 1.180, 1.209, 1.160],
             'Exceedances': [522, 522, 522, 522, 522, 522],
             'xi (shape)': [0.212, 0.208, 0.050, 0.089, 0.073, 0.164],
             'sigma (scale)': [0.546, 0.528, 0.624, 0.613, 0.549, 0.556]
-        }
-        st.dataframe(pd.DataFrame(gpd_data), use_container_width=True)
-        
-        st.markdown("### Backtesting (95% VaR)")
-        backtest = {
-            'Asset': ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes'],
-            'Violations': [16, 16, 13, 21, 8, 11],
-            'Rate': ['6.15%', '6.15%', '5.00%', '8.08%', '3.08%', '4.23%'],
-            'POF p-value': [0.409, 0.409, 1.000, 0.036, 0.127, 0.559]
-        }
-        st.dataframe(pd.DataFrame(backtest), use_container_width=True)
+        })
+        st.dataframe(gpd_data, use_container_width=True)
     
     with tab2:
-        images = [
-            ('fig_gpd_exceedances.png', 'Exceedances with GPD Fit'),
-            ('fig_gpd_var_forecasts.png', 'GPD VaR Forecasts'),
-            ('fig_gpd_mean_excess.png', 'Mean Excess Plots')
-        ]
+        st.markdown("### GPD Parameters Comparison")
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        assets = ['Walmart', 'Costco', 'HomeDepot', 'Pepsico', 'TJX', 'Lowes']
+        xi = [0.212, 0.208, 0.050, 0.089, 0.073, 0.164]
+        sigma = [0.546, 0.528, 0.624, 0.613, 0.549, 0.556]
         
-        for img, title in images:
-            if os.path.exists(img):
-                st.markdown(f"**{title}**")
-                st.image(img, use_container_width=True)
+        axes[0].bar(assets, xi, color='coral', alpha=0.8, edgecolor='black')
+        axes[0].set_title('GPD Shape Parameter (ξ)')
+        axes[0].set_ylabel('ξ')
+        plt.sca(axes[0])
+        plt.xticks(rotation=45)
+        
+        axes[1].bar(assets, sigma, color='steelblue', alpha=0.8, edgecolor='black')
+        axes[1].set_title('GPD Scale Parameter (σ)')
+        axes[1].set_ylabel('σ')
+        plt.sca(axes[1])
+        plt.xticks(rotation=45)
+        
+        plt.tight_layout()
+        st.pyplot(fig)
     
     with tab3:
-        code = '''
+        st.code('''
 from scipy.stats import genpareto
 
 # Select threshold (90th percentile)
@@ -478,15 +394,8 @@ exceedances = (-z)[(-z) > threshold] - threshold
 
 # Fit GPD
 params = genpareto.fit(exceedances, floc=0)
-xi = params[0]     # shape
-sigma = params[2]  # scale
-
-# GPD VaR quantile
-def gpd_var_quantile(xi, sigma, threshold, p, n, n_exceed):
-    Fu = n_exceed / n
-    return threshold + (sigma/xi) * ((Fu/p)**xi - 1)
-'''
-        st.code(code, language="python")
+xi, sigma = params[0], params[2]
+        ''', language="python")
 
 
 # =============================================================================
@@ -495,16 +404,11 @@ def gpd_var_quantile(xi, sigma, threshold, p, n, n_exceed):
 elif selected_part == "part6":
     st.markdown("# ✅ Part 6: Backtesting Evaluation")
     
-    st.markdown("""
-    > *Perform backtesting with Kupiec, Christoffersen, Berkowitz, DQ, and MCS tests.*
-    """)
-    
     tab1, tab2, tab3 = st.tabs(["📊 Results", "📈 Charts", "💻 Code"])
     
     with tab1:
         st.markdown("### Overall Backtesting Results (95% VaR)")
-        
-        results = {
+        results = pd.DataFrame({
             'Model': ['Normal', 'GPD', 'Student-t', 'GEV (Dep)', 'GEV (Indep)'],
             'UC Pass': ['6/6', '5/6', '0/6', '0/6', '0/6'],
             'I Pass': ['5/6', '6/6', '6/6', '6/6', '6/6'],
@@ -512,25 +416,26 @@ elif selected_part == "part6":
             'Berk Pass': ['6/6', '6/6', '6/6', '6/6', '6/6'],
             'DQ Pass': ['6/6', '6/6', '5/6', '0/6', '0/6'],
             'Score': ['96.7%', '96.7%', '56.7%', '40.0%', '40.0%']
-        }
-        st.dataframe(pd.DataFrame(results), use_container_width=True)
-        
+        })
+        st.dataframe(results, use_container_width=True)
         st.success("**Preferred Models:** GARCH-Normal and GARCH-GPD (tied at 96.7%)")
     
     with tab2:
-        images = [
-            ('fig_backtest_heatmap.png', 'Backtesting Heatmap'),
-            ('fig_backtest_passrates.png', 'Pass Rates by Model'),
-            ('fig_backtest_violations.png', 'Violation Rates')
-        ]
-        
-        for img, title in images:
-            if os.path.exists(img):
-                st.markdown(f"**{title}**")
-                st.image(img, use_container_width=True)
+        st.markdown("### Backtesting Pass Rates")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        models = ['Normal', 'GPD', 'Student-t', 'GEV (Dep)', 'GEV (Indep)']
+        scores = [96.7, 96.7, 56.7, 40.0, 40.0]
+        colors = ['green' if s > 80 else 'orange' if s > 50 else 'red' for s in scores]
+        ax.barh(models, scores, color=colors, alpha=0.8, edgecolor='black')
+        ax.axvline(x=80, color='green', linestyle='--', label='Good (80%)')
+        ax.set_xlabel('Pass Rate (%)')
+        ax.set_title('Model Performance in Backtesting')
+        ax.legend()
+        plt.tight_layout()
+        st.pyplot(fig)
     
     with tab3:
-        code = '''
+        st.code('''
 # Kupiec UC Test
 def kupiec_uc_test(hits, alpha):
     n, x = len(hits), hits.sum()
@@ -540,16 +445,9 @@ def kupiec_uc_test(hits, alpha):
     return 1 - chi2.cdf(lr_uc, 1)
 
 # Christoffersen Independence Test
-def christoffersen_ind_test(hits):
-    # Count transitions: n00, n01, n10, n11
-    # LR_I = 2*(log_l1 - log_l0)
-
 # Dynamic Quantile Test
-def dq_test(returns, var, alpha, lags=4):
-    # Regress hits on lagged hits and VaR
-    # DQ_stat = beta'X'X*beta / sigma2
-'''
-        st.code(code, language="python")
+# Model Confidence Set
+        ''', language="python")
 
 
 # =============================================================================
@@ -558,81 +456,72 @@ def dq_test(returns, var, alpha, lags=4):
 elif selected_part == "part7":
     st.markdown("# 💰 Part 7: Expected Shortfall")
     
-    st.markdown("""
-    > *Compute Expected Shortfall and compare ES among assets.*
-    """)
-    
     tab1, tab2, tab3 = st.tabs(["📊 Results", "📈 Charts", "💻 Code"])
     
     with tab1:
-        st.markdown("### Expected Shortfall Results")
-        
         col1, col2 = st.columns(2)
-        
         with col1:
-            st.markdown("**95% Confidence Level**")
-            es_95 = {
+            st.markdown("**95% Confidence**")
+            es_95 = pd.DataFrame({
                 'Asset': ['Lowes', 'HomeDepot', 'TJX', 'Costco', 'Walmart', 'Pepsico'],
                 'VaR': ['-2.73%', '-2.42%', '-2.31%', '-2.01%', '-1.79%', '-1.62%'],
-                'ES': ['-4.29%', '-3.73%', '-3.68%', '-3.19%', '-2.86%', '-2.63%'],
-                'Rank': ['1 (Riskiest)', '2', '3', '4', '5', '6 (Safest)']
-            }
-            st.dataframe(pd.DataFrame(es_95), use_container_width=True)
+                'ES': ['-4.29%', '-3.73%', '-3.68%', '-3.19%', '-2.86%', '-2.63%']
+            })
+            st.dataframe(es_95, use_container_width=True)
         
         with col2:
-            st.markdown("**99% Confidence Level**")
-            es_99 = {
+            st.markdown("**99% Confidence**")
+            es_99 = pd.DataFrame({
                 'Asset': ['Lowes', 'TJX', 'HomeDepot', 'Costco', 'Walmart', 'Pepsico'],
                 'VaR': ['-5.06%', '-4.15%', '-4.43%', '-3.71%', '-3.23%', '-3.00%'],
                 'ES': ['-7.21%', '-6.23%', '-6.18%', '-5.62%', '-5.09%', '-4.54%']
-            }
-            st.dataframe(pd.DataFrame(es_99), use_container_width=True)
-        
-        st.info("**ES/VaR Ratio ≈ 1.5-1.6:** ES is ~50-60% worse than VaR in extreme scenarios.")
+            })
+            st.dataframe(es_99, use_container_width=True)
     
     with tab2:
-        images = [
-            ('fig_es_var_comparison.png', 'VaR vs ES Comparison'),
-            ('fig_es_var_ratio.png', 'ES/VaR Ratio'),
-            ('fig_es_distributions.png', 'Return Distributions with VaR/ES'),
-            ('fig_es_rolling.png', 'Rolling ES'),
-            ('fig_es_boxplot.png', 'Tail Returns Box Plot'),
-            ('fig_es_radar.png', 'Risk Radar Chart')
-        ]
+        st.markdown("### VaR vs ES Comparison (95%)")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        assets = ['Lowes', 'HomeDepot', 'TJX', 'Costco', 'Walmart', 'Pepsico']
+        var_vals = [-2.73, -2.42, -2.31, -2.01, -1.79, -1.62]
+        es_vals = [-4.29, -3.73, -3.68, -3.19, -2.86, -2.63]
+        x = np.arange(len(assets))
+        ax.bar(x - 0.2, var_vals, 0.4, label='VaR', color='steelblue')
+        ax.bar(x + 0.2, es_vals, 0.4, label='ES', color='coral')
+        ax.set_xticks(x)
+        ax.set_xticklabels(assets, rotation=45)
+        ax.set_ylabel('Return (%)')
+        ax.legend()
+        ax.set_title('VaR vs Expected Shortfall (95%)')
+        ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+        plt.tight_layout()
+        st.pyplot(fig)
         
-        for img, title in images:
-            if os.path.exists(img):
-                st.markdown(f"**{title}**")
-                st.image(img, use_container_width=True)
+        st.markdown("### Risk Ranking")
+        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
+        categories = assets
+        N = len(categories)
+        es_norm = [abs(v)/max(abs(v) for v in es_vals) for v in es_vals]
+        angles = [n / float(N) * 2 * np.pi for n in range(N)]
+        angles += angles[:1]
+        es_norm += es_norm[:1]
+        ax.plot(angles, es_norm, 'o-', linewidth=2, color='coral')
+        ax.fill(angles, es_norm, alpha=0.25, color='coral')
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(categories)
+        ax.set_title('Risk Comparison (Higher = Riskier)')
+        st.pyplot(fig)
     
     with tab3:
-        code = '''
+        st.code('''
 # Historical Simulation ES
-def compute_historical_es(returns, confidence_levels=[0.95, 0.99]):
-    for cl in confidence_levels:
-        alpha = 1 - cl
-        var = np.percentile(returns, alpha * 100)
-        tail_returns = returns[returns <= var]
-        es = np.mean(tail_returns)
-        print(f"{cl*100}% VaR: {var:.4f}, ES: {es:.4f}")
-'''
-        st.code(code, language="python")
+def compute_es(returns, alpha=0.05):
+    var = np.percentile(returns, alpha * 100)
+    tail = returns[returns <= var]
+    es = np.mean(tail)
+    return var, es
+        ''', language="python")
 
 
 # Footer
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔧 Run Analysis")
-st.sidebar.markdown("""
-```bash
-python part1.py  # Descriptive
-python part2.py  # GARCH
-python part3.py  # VaR 1-2
-python part4.py  # VaR 3-4
-python part5.py  # VaR 5
-python part6.py  # Backtesting
-python part7.py  # ES
-```
-""")
-
 st.sidebar.markdown("---")
 st.sidebar.caption("QRM Analysis Dashboard v1.0")
