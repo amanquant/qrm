@@ -1,3 +1,9 @@
+"""
+QRM Analysis Showcase - Streamlit App
+======================================
+Interactive dashboard to explore all parts of the Quantitative Risk Management analysis.
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
