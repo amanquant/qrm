@@ -113,8 +113,7 @@ if selected_part == "overview":
     st.markdown('<div class="main-header">📊 Quantitative Risk Management Analysis</div>', unsafe_allow_html=True)
     
     st.markdown("""
-    Welcome to the QRM Analysis Dashboard! This app showcases a comprehensive financial risk analysis 
-    covering **6 U.S. retail sector stocks** over **20 years of daily data**.
+    Welcome to the Andrea Manzi Homework interactive overview*.
     """)
     
     col1, col2, col3 = st.columns(3)
